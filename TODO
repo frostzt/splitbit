@@ -1,0 +1,158 @@
+# Load Balancer Implementation Todo List
+
+## Phase 1: Basic Forwarding
+- [ ] **Define Backend Server Pool**
+  - Create a struct to represent backend servers (host, port, alive status)
+  - Maintain a list/slice of available backend servers
+  - Add configuration for backend servers (hardcoded first, then config file)
+
+- [ ] **Implement Request Forwarding**
+  - Instead of responding directly, forward client requests to backend servers
+  - Establish connection to selected backend server
+  - Copy data bidirectionally between client and backend (io.Copy or custom proxy)
+  - Handle connection cleanup for both client and backend connections
+
+- [ ] **Basic Round Robin Algorithm**
+  - Keep track of current server index
+  - Rotate through servers sequentially
+  - Handle wraparound when reaching end of server list
+
+## Phase 2: Load Balancing Algorithms
+- [ ] **Weighted Round Robin**
+  - Add weight field to backend server struct
+  - Implement weighted selection logic
+  - Allow different servers to handle different loads
+
+- [ ] **Least Connections**
+  - Track active connection count per backend server
+  - Select server with fewest active connections
+  - Update connection counts on connect/disconnect
+
+- [ ] **Random Selection**
+  - Implement random backend server selection
+  - Add weighted random option
+
+- [ ] **IP Hash / Consistent Hashing**
+  - Hash client IP to determine backend server
+  - Ensures same client always goes to same server (session affinity)
+  - Implement consistent hashing for better distribution
+
+## Phase 3: Health Checking
+- [ ] **Active Health Checks**
+  - Implement periodic health check pings to backend servers
+  - Mark servers as healthy/unhealthy based on response
+  - Remove unhealthy servers from rotation automatically
+  - Add configurable health check intervals and timeouts
+
+- [ ] **Passive Health Checks**
+  - Monitor connection failures during normal operation
+  - Temporarily remove servers that fail multiple requests
+  - Implement circuit breaker pattern for failing servers
+
+- [ ] **Health Check Endpoints**
+  - Define custom health check URLs for HTTP backends
+  - Support different health check methods (TCP, HTTP, custom)
+
+## Phase 4: Connection Management
+- [ ] **Connection Pooling**
+  - Maintain pools of persistent connections to backend servers
+  - Reuse connections instead of creating new ones for each request
+  - Implement connection pool sizing and cleanup
+
+- [ ] **Connection Limits**
+  - Set maximum concurrent connections per backend server
+  - Implement queue system for excess connections
+  - Add connection throttling and rate limiting
+
+- [ ] **Timeout Management**
+  - Configure connection timeouts, read timeouts, write timeouts
+  - Handle slow backends gracefully
+  - Implement retry logic with exponential backoff
+
+## Phase 5: Advanced Features
+- [ ] **SSL/TLS Support**
+  - Add TLS termination at load balancer
+  - Support SSL passthrough mode
+  - Certificate management and rotation
+
+- [ ] **Session Persistence**
+  - Implement sticky sessions (session affinity)
+  - Support cookie-based session routing
+  - Handle session failover scenarios
+
+- [ ] **HTTP-Specific Features** (if building HTTP load balancer)
+  - Parse HTTP headers for advanced routing
+  - Support path-based routing
+  - Header manipulation and injection
+  - Gzip compression support
+
+## Phase 6: Monitoring and Observability
+- [ ] **Metrics Collection**
+  - Track requests per second, response times, error rates
+  - Monitor backend server performance metrics
+  - Connection pool statistics
+
+- [ ] **Logging**
+  - Structured logging with different log levels
+  - Request/response logging with correlation IDs
+  - Access logs in standard formats
+
+- [ ] **Health Dashboard**
+  - Web interface showing backend server status
+  - Real-time metrics display
+  - Manual server enable/disable controls
+
+## Phase 7: Configuration and Deployment
+- [ ] **Configuration Management**
+  - YAML/JSON configuration files
+  - Runtime configuration reloading without restart
+  - Environment variable support
+  - Command-line argument parsing
+
+- [ ] **Graceful Shutdown**
+  - Handle SIGTERM/SIGINT signals properly
+  - Drain existing connections before shutdown
+  - Prevent accepting new connections during shutdown
+
+- [ ] **Docker Support**
+  - Create Dockerfile for containerized deployment
+  - Docker Compose setup with sample backend servers
+  - Health check integration
+
+## Phase 8: Performance and Scalability
+- [ ] **Performance Optimization**
+  - Profile CPU and memory usage
+  - Optimize goroutine usage and pooling
+  - Implement efficient data structures for server selection
+
+- [ ] **High Availability**
+  - Support multiple load balancer instances
+  - Leader election for configuration management
+  - State synchronization between instances
+
+- [ ] **Auto-scaling Integration**
+  - Dynamic backend server discovery
+  - Integration with service discovery systems (Consul, etcd)
+  - Kubernetes integration
+
+## Testing and Validation
+- [ ] **Unit Tests**
+  - Test load balancing algorithms
+  - Test health checking logic
+  - Mock backend servers for testing
+
+- [ ] **Integration Tests**
+  - End-to-end testing with real backend servers
+  - Failure scenario testing
+  - Load testing with various traffic patterns
+
+- [ ] **Benchmarking**
+  - Performance comparisons with other load balancers
+  - Latency and throughput measurements
+  - Resource usage analysis
+
+## Documentation
+- [ ] **README with examples**
+- [ ] **Configuration reference**
+- [ ] **Architecture documentation**
+- [ ] **Deployment guides**
