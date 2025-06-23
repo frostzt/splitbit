@@ -10,7 +10,11 @@ import (
 )
 
 func handleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			fmt.Println(fmt.Errorf("error closing connection: %s", err))
+		}
+	}()
 
 	// Extract details from Conn
 	localAddr := conn.LocalAddr().String()
@@ -29,8 +33,8 @@ func handleConnection(conn net.Conn) {
 	request := string(buffer[:n])
 	log.Printf("Read %d bytes from %s\n", n, remoteAddr)
 
-	requestType, _ := internals.GetRequestType(request)
-	if requestType == "" {
+	isHttpRequest := internals.IsHTTPRequest(request)
+	if isHttpRequest {
 		log.Println("Unknown request type or non-http request")
 
 		// Send raw TCP response for non-HTTP clients
@@ -68,7 +72,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	defer ln.Close()
+	defer func() {
+		if err := ln.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	log.Println("Listening on port 8080")
 

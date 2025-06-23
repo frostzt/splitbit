@@ -1,24 +1,19 @@
 package internals
 
 import (
-	"errors"
-	"net/http"
+	"strings"
 )
 
-var ErrUnknownRequestType = errors.New("unknown request type")
-
-func GetRequestType(request string) (string, error) {
-	if request[:4] == "GET " {
-		return http.MethodGet, nil
-	} else if request[:5] == "HEAD " {
-		return http.MethodHead, nil
-	} else if request[:4] == "PUT " {
-		return http.MethodPut, nil
-	} else if request[:6] == "PATCH " {
-		return http.MethodPatch, nil
-	} else if request[:7] == "DELETE " {
-		return http.MethodDelete, nil
+func IsHTTPRequest(request string) bool {
+	if len(request) < 5 { // Minimum "GET /"
+		return false
 	}
 
-	return "", ErrUnknownRequestType
+	return strings.HasPrefix(request, "GET ") ||
+		strings.HasPrefix(request, "POST ") ||
+		strings.HasPrefix(request, "PUT ") ||
+		strings.HasPrefix(request, "DELETE ") ||
+		strings.HasPrefix(request, "HEAD ") ||
+		strings.HasPrefix(request, "OPTIONS ") ||
+		strings.HasPrefix(request, "PATCH ")
 }
