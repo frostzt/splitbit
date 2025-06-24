@@ -41,12 +41,13 @@ func NewService(host string, port int) *Service {
 // PingService performs health check on the provided service's health check route if the call fails
 // it marks the [AliveStatus] as false otherwise marks it as true
 func (s *Service) PingService() error {
-	_, err := net.Dial("tcp", s.HealthCheckPath)
+	conn, err := net.Dial("tcp", s.HealthCheckPath)
 	if err != nil {
-		log.Printf("Failed to connect to health check service at %s: %s\n", s.HealthCheckPath, err)
+		log.Printf("Health check failed for service '%s' at %s: %s\n", s.Host, s.HealthCheckPath, err)
 		s.AliveStatus = false // TODO: Need to implement some retry mechanism
 		return err
 	}
+	defer conn.Close()
 
 	s.AliveStatus = true
 	return nil
@@ -56,3 +57,5 @@ func (s *Service) PingService() error {
 func (s *Service) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
+
+func (s *Service) CopyData() error {}
