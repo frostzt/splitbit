@@ -2,8 +2,8 @@ package services
 
 import (
 	"fmt"
-	"log"
-	"net"
+	"net/http"
+	"time"
 )
 
 // Service corresponds to an Application server listening on the provided host and port
@@ -38,16 +38,24 @@ func NewService(host string, port int) *Service {
 	}
 }
 
-// PingService performs health check on the provided service's health check route if the call fails
+// HealthCheckService performs health check on the provided service's health check route if the call fails
 // it marks the [AliveStatus] as false otherwise marks it as true
-func (s *Service) PingService() error {
-	conn, err := net.Dial("tcp", s.HealthCheckPath)
+func (s *Service) HealthCheckService() error {
+	url := fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.HealthCheckPath)
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
-		log.Printf("Health check failed for service '%s' at %s: %s\n", s.Host, s.HealthCheckPath, err)
-		s.AliveStatus = false // TODO: Need to implement some retry mechanism
+		s.AliveStatus = false
 		return err
 	}
-	defer conn.Close()
+	defer resp.Body.Close()
+
+	// Verify that the health check returned a 200 code
+	if resp.StatusCode != http.StatusOK {
+		s.AliveStatus = false
+		return fmt.Errorf("non-200 health check %d", resp.StatusCode)
+	}
 
 	s.AliveStatus = true
 	return nil

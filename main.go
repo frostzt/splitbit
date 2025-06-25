@@ -2,45 +2,45 @@ package main
 
 import (
 	"errors"
-	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"sync"
 
 	"github.com/frostzt/splitbit/internals"
+	"github.com/frostzt/splitbit/internals/services"
 )
 
 var (
 	// tcpListener is the TCP socket which will listen to the TCP connections
 	tcpListener net.Listener
+
+	// availableService are a list of services provided/registered by the user
+	availableServices []*services.Service
 )
 
 func handleTCPConn(conn net.Conn) {
 	log.Printf("Accepting TCP connection from %s with destination of %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
 	defer conn.Close()
 
+	backend := availableServices[0]
+	if err := backend.HealthCheckService(); err != nil {
+		log.Printf("failed to ping service: %v", err)
+	}
+
 	// Try and connect to the original destination
-	remoteConn, err := conn.(*internals.SBTCPConn).DialOriginalDestination(false)
-	if err != nil {
-		log.Printf("DialOriginalDestination: %v", err)
-		return
-	}
-	defer remoteConn.Close()
-
-	var streamWait sync.WaitGroup
-	streamWait.Add(2)
-
-	streamConn := func(dst io.Writer, src io.Reader) {
-		io.Copy(dst, src)
-		streamWait.Done()
-	}
-
-	go streamConn(remoteConn, conn)
-	go streamConn(conn, remoteConn)
-
-	streamWait.Wait()
+	//var streamWait sync.WaitGroup
+	//streamWait.Add(2)
+	//
+	//streamConn := func(dst io.Writer, src io.Reader) {
+	//	io.Copy(dst, src)
+	//	streamWait.Done()
+	//}
+	//
+	//go streamConn(remoteConn, conn)
+	//go streamConn(conn, remoteConn)
+	//
+	//streamWait.Wait()
 }
 
 func listenTCPConn() {
@@ -65,6 +65,10 @@ func listenTCPConn() {
 
 func main() {
 	var err error
+
+	// TODO: Right now hardcoded need to move these to a YAML Configuration
+	newService := services.NewService("localhost", 8000)
+	availableServices = append(availableServices, newService)
 
 	tcpListener, err = internals.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 8080})
 	if err != nil {
