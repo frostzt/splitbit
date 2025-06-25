@@ -66,27 +66,5 @@ func handleConnection(conn net.Conn) {
 }
 
 func main() {
-	// Try and start a TCP Connection on port 80
-	ln, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer func() {
-		if err := ln.Close(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	log.Println("Listening on port 8080")
-
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			fmt.Println(fmt.Errorf("error accepting: %s", err))
-			continue
-		}
-
-		go handleConnection(conn)
-	}
+	tcpListener, err := net.ListenTCP()
 }

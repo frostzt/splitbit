@@ -15,10 +15,57 @@ type SBTCPConn struct {
 	net.Conn
 }
 
+// Listener is a simple TCP Listener
+type Listener struct {
+	base net.Listener
+}
+
+func (l *Listener) Addr() net.Addr {
+	return l.base.Addr()
+}
+
+func (l *Listener) Accept() (net.Conn, error) {
+	return l.AcceptSB()
+}
+
+func (l *Listener) AcceptSB() (*SBTCPConn, error) {
+	tcpConn, err := l.base.(*net.TCPListener).AcceptTCP()
+	if err != nil {
+		return nil, err
+	}
+
+	return &SBTCPConn{tcpConn}, nil
+}
+
+func (l *Listener) Close() error {
+	return l.base.Close()
+}
+
+func ListenTCP(network string, addr *net.TCPAddr) (net.Listener, error) {
+	listener, err := net.ListenTCP(network, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	fdSource, err := listener.File()
+	if err != nil {
+		return nil, &net.OpError{Op: "listen", Err: fmt.Errorf("failed to get file descriptor: %w", err)}
+	}
+	defer fdSource.Close()
+
+	if err := syscall.SetsockoptInt(int(fdSource.Fd()), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1); err != nil {
+		return nil, &net.OpError{Op: "listen", Err: fmt.Errorf("failed to set ip transparent: %w", err)}
+	}
+
+	return &Listener{listener}, err
+}
+
 func NewSplitbitTCPConn(conn net.Conn) *SBTCPConn {
 	return &SBTCPConn{conn}
 }
 
+// DialOriginalDestination will open a connection to the original destination that the original
+// connection was trying to connect to
 func (c *SBTCPConn) DialOriginalDestination(dontAssumeRemote bool) (*net.TCPConn, error) {
 	rAddrPtr := c.RemoteAddr().(*net.TCPAddr)
 	lAddrPtr := c.LocalAddr().(*net.TCPAddr)
@@ -79,8 +126,7 @@ func (c *SBTCPConn) DialOriginalDestination(dontAssumeRemote bool) (*net.TCPConn
 	return remoteConn.(*net.TCPConn), nil
 }
 
-// tcpAddToSockerAddr will convert a TCPAddr
-// into a Sockaddr that may be used when
+// tcpAddToSockerAddr will convert a TCPAddr into a Sockaddr that may be used when
 // connecting and binding sockets
 func tcpAddrToSocketAddr(addr *net.TCPAddr) (syscall.Sockaddr, error) {
 	switch {
@@ -103,8 +149,7 @@ func tcpAddrToSocketAddr(addr *net.TCPAddr) (syscall.Sockaddr, error) {
 	}
 }
 
-// tcpAddrFamily will attempt to work
-// out the address family based on the
+// tcpAddrFamily will attempt to work out the address family based on the
 // network and TCP addresses
 func tcpAddrFamily(net string, localAddr, remoteAddr *net.TCPAddr) int {
 	switch net[len(net)-1] {
