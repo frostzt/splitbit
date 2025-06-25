@@ -57,5 +57,3 @@ func (s *Service) PingService() error {
 func (s *Service) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
-
-func (s *Service) CopyData() error {}

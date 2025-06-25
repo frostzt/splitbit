@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -61,8 +62,21 @@ func (c *SBTCPConn) DialOriginalDestination(dontAssumeRemote bool) (*net.TCPConn
 		}
 	}
 
-	if err := syscall
+	if err := syscall.Connect(fd, remoteSocketAddress); err != nil && !strings.Contains(err.Error(), "operation now in progress") {
+		syscall.Close(fd)
+		return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("socket connect: %w", err)}
+	}
 
+	fdFile := os.NewFile(uintptr(fd), fmt.Sprintf("net tcp dial %s", c.LocalAddr().String()))
+	defer fdFile.Close()
+
+	remoteConn, err := net.FileConn(fdFile)
+	if err != nil {
+		syscall.Close(fd)
+		return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("fd to conn: %w", err)}
+	}
+
+	return remoteConn.(*net.TCPConn), nil
 }
 
 // tcpAddToSockerAddr will convert a TCPAddr
