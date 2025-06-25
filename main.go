@@ -1,70 +1,85 @@
 package main
 
 import (
-	"fmt"
+	"errors"
+	"io"
 	"log"
 	"net"
-	"time"
+	"os"
+	"os/signal"
+	"sync"
 
 	"github.com/frostzt/splitbit/internals"
 )
 
-func handleConnection(conn net.Conn) {
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Println(fmt.Errorf("error closing connection: %s", err))
-		}
-	}()
+var (
+	// tcpListener is the TCP socket which will listen to the TCP connections
+	tcpListener net.Listener
+)
 
-	// Extract details from Conn
-	localAddr := conn.LocalAddr().String()
-	remoteAddr := conn.RemoteAddr().String()
+func handleTCPConn(conn net.Conn) {
+	log.Printf("Accepting TCP connection from %s with destination of %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
+	defer conn.Close()
 
-	log.Println("Connection from " + remoteAddr + " to " + localAddr)
-
-	// Read the request
-	buffer := make([]byte, 4096)
-	n, err := conn.Read(buffer)
+	// Try and connect to the original destination
+	remoteConn, err := conn.(*internals.SBTCPConn).DialOriginalDestination(false)
 	if err != nil {
-		fmt.Println(fmt.Errorf("error reading: %s", err))
+		log.Printf("DialOriginalDestination: %v", err)
 		return
 	}
+	defer remoteConn.Close()
 
-	request := string(buffer[:n])
-	log.Printf("Read %d bytes from %s\n", n, remoteAddr)
+	var streamWait sync.WaitGroup
+	streamWait.Add(2)
 
-	isHttpRequest := internals.IsHTTPRequest(request)
-	if isHttpRequest {
-		log.Println("Unknown request type or non-http request")
+	streamConn := func(dst io.Writer, src io.Reader) {
+		io.Copy(dst, src)
+		streamWait.Done()
+	}
 
-		// Send raw TCP response for non-HTTP clients
-		response := fmt.Sprintf("Hello from load balancer! Time: %s\n", time.Now().Format(time.RFC3339))
-		_, err = conn.Write([]byte(response))
+	go streamConn(remoteConn, conn)
+	go streamConn(conn, remoteConn)
+
+	streamWait.Wait()
+}
+
+func listenTCPConn() {
+	for {
+		conn, err := tcpListener.Accept()
+
+		log.Printf("Remote: %s → Local: %s", conn.RemoteAddr(), conn.LocalAddr())
+
 		if err != nil {
-			fmt.Println(fmt.Errorf("error writing: %s", err))
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Temporary() {
+				log.Printf("temporary error: %v", err)
+				continue
+			}
+
+			log.Fatalf("failed to accept tcp conn: %v", err)
 		}
 
-		return
-	}
-
-	// Send HTTP Response
-	httpResponse := fmt.Sprintf(
-		"HTTP/1.1 200 OK\r\n"+
-			"Content-Type: text/plain\r\n"+
-			"Content-Length: %d\r\n"+
-			"Connection: close\r\n"+
-			"\r\n"+
-			"Hello from load balancer! Time: %s\n",
-		len("Hello from load balancer! Time: "+time.Now().Format(time.RFC3339)+"\n"),
-		time.Now().Format(time.RFC3339))
-
-	// Write back the response
-	_, err = conn.Write([]byte(httpResponse))
-	if err != nil {
-		fmt.Println(fmt.Errorf("error writing: %s", err))
+		go handleTCPConn(conn)
 	}
 }
 
 func main() {
-	tcpListener, err := net.ListenTCP()
+	var err error
+
+	tcpListener, err = internals.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 8080})
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+		return
+	}
+
+	defer tcpListener.Close()
+	go listenTCPConn()
+
+	// Listen for interrupts
+	interruptListener := make(chan os.Signal)
+	signal.Notify(interruptListener, os.Interrupt)
+	<-interruptListener
+
+	log.Printf("interrupt signal received, stopping")
+	os.Exit(0)
 }

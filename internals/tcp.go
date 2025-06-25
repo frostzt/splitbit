@@ -1,12 +1,14 @@
 package internals
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
-	"strings"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // SBTCPConn is a simple struct which wraps around the Conn
@@ -75,7 +77,9 @@ func (c *SBTCPConn) DialOriginalDestination(dontAssumeRemote bool) (*net.TCPConn
 		return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("failed to parse local socket address: %w", err)}
 	}
 
-	localSocketAddress, err := tcpAddrToSocketAddr(rAddrPtr)
+	localIP := rAddrPtr.IP
+	bindAddr := &net.TCPAddr{IP: localIP, Port: 0} // OS will pick an available port
+	localSocketAddress, err := tcpAddrToSocketAddr(bindAddr)
 	if err != nil {
 		return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("failed to parse remote socket address: %w", err)}
 	}
@@ -92,7 +96,12 @@ func (c *SBTCPConn) DialOriginalDestination(dontAssumeRemote bool) (*net.TCPConn
 		return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("socket option SO_REUSEADDR: %w", err)}
 	}
 
-	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.IP_TRANSPARENT, 1); err != nil {
+	if err := unix.SetsockoptInt(int(fd), unix.SOL_IP, unix.SO_REUSEPORT, 1); err != nil {
+		syscall.Close(fd)
+		return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("socket option SO_REUSEPORT: %w", err)}
+	}
+
+	if err := syscall.SetsockoptInt(fd, syscall.SOL_IP, syscall.IP_TRANSPARENT, 1); err != nil {
 		syscall.Close(fd)
 		return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("socket option IP_TRANSPARENT: %w", err)}
 	}
@@ -109,9 +118,12 @@ func (c *SBTCPConn) DialOriginalDestination(dontAssumeRemote bool) (*net.TCPConn
 		}
 	}
 
-	if err := syscall.Connect(fd, remoteSocketAddress); err != nil && !strings.Contains(err.Error(), "operation now in progress") {
-		syscall.Close(fd)
-		return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("socket connect: %w", err)}
+	if err := syscall.Connect(fd, remoteSocketAddress); err != nil {
+		var errno syscall.Errno
+		if !errors.As(err, &errno) || !errors.Is(err, syscall.EINPROGRESS) {
+			syscall.Close(fd)
+			return nil, &net.OpError{Op: "dial", Err: fmt.Errorf("socket connect: %w", err)}
+		}
 	}
 
 	fdFile := os.NewFile(uintptr(fd), fmt.Sprintf("net tcp dial %s", c.LocalAddr().String()))
