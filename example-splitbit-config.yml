@@ -1,0 +1,15 @@
+name: splitbit-example-config
+algorithm: round-robin
+scheme: "tcp"
+backends:
+  - name: backend-one
+    host: "localhost"
+    port: 8000
+    health_check: "/health"
+    weight: 1
+
+  - name: backend-two
+    host: "localhost"
+    port: 8001
+    health_check: "/health"
+    weight: 1

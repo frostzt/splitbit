@@ -1,24 +1,24 @@
 # Load Balancer Implementation Todo List
 
 ## Phase 1: Basic Forwarding
-- [ ] **Define Backend Server Pool**
+- [x] **Define Backend Server Pool**
   - Create a struct to represent backend servers (host, port, alive status)
   - Maintain a list/slice of available backend servers
   - Add configuration for backend servers (hardcoded first, then config file)
 
-- [ ] **Implement Request Forwarding**
+- [x] **Implement Request Forwarding**
   - Instead of responding directly, forward client requests to backend servers
   - Establish connection to selected backend server
   - Copy data bidirectionally between client and backend (io.Copy or custom proxy)
   - Handle connection cleanup for both client and backend connections
 
-- [ ] **Basic Round Robin Algorithm**
+- [x] **Basic Round Robin Algorithm**
   - Keep track of current server index
   - Rotate through servers sequentially
   - Handle wraparound when reaching end of server list
 
 ## Phase 2: Load Balancing Algorithms
-- [ ] **Weighted Round Robin**
+- [x] **Weighted Round Robin**
   - Add weight field to backend server struct
   - Implement weighted selection logic
   - Allow different servers to handle different loads
