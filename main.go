@@ -2,10 +2,12 @@ package main
 
 import (
 	"errors"
+	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 
 	"github.com/frostzt/splitbit/internals"
 	"github.com/frostzt/splitbit/internals/services"
@@ -27,23 +29,37 @@ func handleTCPConn(conn net.Conn) {
 	defer conn.Close()
 
 	backend := backendSelector.SelectService()
-	if err := backend.HealthCheckService(); err != nil {
-		log.Printf("failed to ping service: %v", err)
+	if backend == nil {
+		log.Printf("No backend selected")
+		return
 	}
 
+	if err := backend.HealthCheckService(); err != nil {
+		log.Printf("failed to ping service: %v", err)
+		return
+	}
+
+	remoteConn, err := net.Dial("tcp", backend.Address())
+	if err != nil {
+		log.Printf("failed to connect to backend: %v", err)
+		return
+	}
+
+	defer remoteConn.Close()
+
 	// Try and connect to the original destination
-	//var streamWait sync.WaitGroup
-	//streamWait.Add(2)
-	//
-	//streamConn := func(dst io.Writer, src io.Reader) {
-	//	io.Copy(dst, src)
-	//	streamWait.Done()
-	//}
-	//
-	//go streamConn(remoteConn, conn)
-	//go streamConn(conn, remoteConn)
-	//
-	//streamWait.Wait()
+	var streamWait sync.WaitGroup
+	streamWait.Add(2)
+
+	streamConn := func(dst io.Writer, src io.Reader) {
+		io.Copy(dst, src)
+		streamWait.Done()
+	}
+
+	go streamConn(remoteConn, conn)
+	go streamConn(conn, remoteConn)
+
+	streamWait.Wait()
 }
 
 func listenTCPConn() {
