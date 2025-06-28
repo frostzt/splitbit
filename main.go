@@ -17,13 +17,16 @@ var (
 
 	// availableService are a list of services provided/registered by the user
 	availableServices []*services.Service
+
+	// backendSelector selects one of the available services based on the algorithm
+	backendSelector services.BackendSelector
 )
 
 func handleTCPConn(conn net.Conn) {
 	log.Printf("Accepting TCP connection from %s with destination of %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
 	defer conn.Close()
 
-	backend := availableServices[0]
+	backend := backendSelector.SelectService()
 	if err := backend.HealthCheckService(); err != nil {
 		log.Printf("failed to ping service: %v", err)
 	}
@@ -69,6 +72,8 @@ func main() {
 	// TODO: Right now hardcoded need to move these to a YAML Configuration
 	newService := services.NewService("localhost", 8000)
 	availableServices = append(availableServices, newService)
+
+	backendSelector = services.NewRoundRobinSelector(availableServices)
 
 	tcpListener, err = internals.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 8080})
 	if err != nil {
