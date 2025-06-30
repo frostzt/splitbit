@@ -1,10 +1,14 @@
 package services
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
+
+const defaultHeartbeatInterval = 30 * time.Second
 
 // Service corresponds to an Application server listening on the provided host and port
 // services are registered at the very start of the load balancer
@@ -59,6 +63,49 @@ func (s *Service) HealthCheckService() error {
 
 	s.AliveStatus = true
 	return nil
+}
+
+func (s *Service) Pinger(ctx context.Context, w io.Writer, reset <-chan time.Duration) {
+	var interval time.Duration
+	select {
+	case <-ctx.Done():
+		return
+
+	case interval = <-reset:
+	default:
+	}
+
+	if interval <= 0 {
+		interval = defaultHeartbeatInterval
+	}
+
+	timer := time.NewTimer(interval)
+	defer func() {
+		if !timer.Stop() {
+			<-timer.C
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case newInterval := <-reset:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			if newInterval > 0 {
+				interval = newInterval
+			}
+
+		case <-timer.C:
+			if _, err := w.Write([]byte("ping")); err != nil {
+				return
+			}
+		}
+
+		_ = timer.Reset(interval)
+	}
 }
 
 // Address returns the network address in the host:port form

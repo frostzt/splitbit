@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -26,7 +27,7 @@ var (
 
 func handleTCPConn(conn net.Conn) {
 	log.Printf("Accepting TCP connection from %s with destination of %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	backend := backendSelector.SelectService()
 	if backend == nil {
@@ -45,7 +46,7 @@ func handleTCPConn(conn net.Conn) {
 		return
 	}
 
-	defer remoteConn.Close()
+	defer func() { _ = remoteConn.Close() }()
 
 	// Try and connect to the original destination
 	var streamWait sync.WaitGroup
@@ -88,6 +89,13 @@ func main() {
 	// TODO: Right now hardcoded need to move these to a YAML Configuration
 	newService := services.NewService("localhost", 8000)
 	availableServices = append(availableServices, newService)
+
+	config, err := internals.LoadConfig("./example-splitbit-config.yml")
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	fmt.Printf("config: %+v\n", config)
 
 	backendSelector = services.NewRoundRobinSelector(availableServices)
 
