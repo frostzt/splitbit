@@ -13,6 +13,9 @@ const defaultHeartbeatInterval = 30 * time.Second
 // Service corresponds to an Application server listening on the provided host and port
 // services are registered at the very start of the load balancer
 type Service struct {
+	// Name of the service provided by the user
+	Name string
+
 	// Host URL of the service where the service is running
 	Host string
 
@@ -32,14 +35,37 @@ type Service struct {
 	Weight int
 }
 
-func NewService(host string, port int) *Service {
-	return &Service{
+type ServiceOptions struct {
+	Name            string
+	HealthCheckPath string
+	Weight          int
+}
+
+func NewService(host string, port int, opts *ServiceOptions) *Service {
+	s := &Service{
+		Name:            host,
 		Host:            host,
 		Port:            port,
 		AliveStatus:     true,
 		HealthCheckPath: "/health",
 		Weight:          0,
 	}
+
+	if opts != nil {
+		if opts.Name != "" {
+			s.Name = opts.Name
+		}
+
+		if opts.HealthCheckPath != "" {
+			s.HealthCheckPath = opts.HealthCheckPath
+		}
+
+		if opts.Weight > 0 {
+			s.Weight = opts.Weight
+		}
+	}
+
+	return s
 }
 
 // HealthCheckService performs health check on the provided service's health check route if the call fails

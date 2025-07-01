@@ -11,6 +11,7 @@ import (
 
 type SplitbitConfig struct {
 	Name      string          `yaml:"name"`
+	Env       string          `yaml:"env"`
 	Algorithm string          `yaml:"algorithm"`
 	Scheme    string          `yaml:"scheme"`
 	Backends  []BackendConfig `yaml:"backends"`
@@ -27,6 +28,15 @@ type BackendConfig struct {
 func (cfg *SplitbitConfig) Validate() error {
 	if cfg.Name == "" {
 		return errors.New("name is required for the configuration")
+	}
+
+	envs := []string{EnvDev, EnvProd}
+	if !slices.Contains(envs, cfg.Env) {
+		if cfg.Env == "" {
+			cfg.Env = EnvDev
+		} else {
+			return errors.New("only [DEV, PROD] are supported as env")
+		}
 	}
 
 	supported := []string{"round-robin", "weighted-round-robin"}

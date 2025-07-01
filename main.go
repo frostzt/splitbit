@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -86,16 +85,23 @@ func listenTCPConn() {
 func main() {
 	var err error
 
-	// TODO: Right now hardcoded need to move these to a YAML Configuration
-	newService := services.NewService("localhost", 8000)
-	availableServices = append(availableServices, newService)
-
+	// Load configuration
 	config, err := internals.LoadConfig("./example-splitbit-config.yml")
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	fmt.Printf("config: %+v\n", config)
+	// Register backend services
+	for _, service := range config.Backends {
+		options := &services.ServiceOptions{
+			Weight:          service.Weight,
+			HealthCheckPath: service.HealthCheck,
+		}
+
+		availableServices = append(availableServices, services.NewService(service.Host, service.Port, options))
+
+		log.Printf("Registered service: %s\n", service.Name)
+	}
 
 	backendSelector = services.NewRoundRobinSelector(availableServices)
 
@@ -105,7 +111,7 @@ func main() {
 		return
 	}
 
-	defer tcpListener.Close()
+	defer func() { _ = tcpListener.Close() }()
 	go listenTCPConn()
 
 	// Listen for interrupts

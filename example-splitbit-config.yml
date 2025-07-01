@@ -1,5 +1,6 @@
 name: splitbit-example-config
 algorithm: round-robin
+env: "DEV"
 scheme: "tcp"
 backends:
   - name: backend-one
