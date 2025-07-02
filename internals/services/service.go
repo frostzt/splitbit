@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/frostzt/splitbit/internals"
 )
 
 const defaultHeartbeatInterval = 30 * time.Second
@@ -89,6 +91,23 @@ func (s *Service) HealthCheckService() error {
 
 	s.AliveStatus = true
 	return nil
+}
+
+// PeriodicallyHealthCheckService will run health check onto every registered service every 5 seconds
+// if the service fails the health check the service will be marked as `AliveStatus = false`
+func (s *Service) PeriodicallyHealthCheckService(ctx context.Context, logger *internals.Logger) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			err := s.HealthCheckService()
+			logger.Error("Health check failed for service %s: %s", s.Name, err)
+		}
+	}
 }
 
 func (s *Service) Pinger(ctx context.Context, w io.Writer, reset <-chan time.Duration) {

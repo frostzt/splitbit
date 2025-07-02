@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -31,11 +32,6 @@ func handleTCPConn(conn net.Conn) {
 	backend := backendSelector.SelectService()
 	if backend == nil {
 		log.Printf("No backend selected")
-		return
-	}
-
-	if err := backend.HealthCheckService(); err != nil {
-		log.Printf("failed to ping service: %v", err)
 		return
 	}
 
@@ -91,6 +87,14 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	// Logger
+	logger := internals.NewLogger(config.Env)
+
+	logger.Info("Starting splitbit service with env %s", config.Env)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Register backend services
 	for _, service := range config.Backends {
 		options := &services.ServiceOptions{
@@ -98,9 +102,13 @@ func main() {
 			HealthCheckPath: service.HealthCheck,
 		}
 
-		availableServices = append(availableServices, services.NewService(service.Host, service.Port, options))
+		svc := services.NewService(service.Host, service.Port, options)
+		availableServices = append(availableServices, svc)
 
-		log.Printf("Registered service: %s\n", service.Name)
+		// Start health check loop
+		go svc.PeriodicallyHealthCheckService(ctx, logger)
+
+		logger.Info("Registered service: %s", service.Name)
 	}
 
 	backendSelector = services.NewRoundRobinSelector(availableServices)
@@ -108,7 +116,6 @@ func main() {
 	tcpListener, err = internals.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 8080})
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
-		return
 	}
 
 	defer func() { _ = tcpListener.Close() }()
@@ -119,6 +126,7 @@ func main() {
 	signal.Notify(interruptListener, os.Interrupt)
 	<-interruptListener
 
-	log.Printf("interrupt signal received, stopping")
+	logger.Warn("interrupt signal received, stopping...")
+	cancel()
 	os.Exit(0)
 }

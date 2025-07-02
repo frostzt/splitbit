@@ -53,11 +53,7 @@ func ListenTCP(network string, addr *net.TCPAddr) (net.Listener, error) {
 	if err != nil {
 		return nil, &net.OpError{Op: "listen", Err: fmt.Errorf("failed to get file descriptor: %w", err)}
 	}
-	defer fdSource.Close()
-
-	//if err := syscall.SetsockoptInt(int(fdSource.Fd()), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1); err != nil {
-	//	return nil, &net.OpError{Op: "listen", Err: fmt.Errorf("failed to set ip transparent: %w", err)}
-	//}
+	defer func() { _ = fdSource.Close() }()
 
 	return &Listener{listener}, err
 }
