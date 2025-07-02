@@ -102,11 +102,11 @@ func main() {
 			HealthCheckPath: service.HealthCheck,
 		}
 
-		svc := services.NewService(service.Host, service.Port, options)
+		svc := services.NewService(service.Host, service.Port, options, logger)
 		availableServices = append(availableServices, svc)
 
 		// Start health check loop
-		go svc.PeriodicallyHealthCheckService(ctx, logger)
+		go svc.PeriodicallyHealthCheckService(ctx)
 
 		logger.Info("Registered service: %s", service.Name)
 	}

@@ -35,6 +35,9 @@ type Service struct {
 
 	// Weight for weighted-load balancing
 	Weight int
+
+	// Logger directly injected into service
+	Logger *internals.Logger
 }
 
 type ServiceOptions struct {
@@ -43,7 +46,7 @@ type ServiceOptions struct {
 	Weight          int
 }
 
-func NewService(host string, port int, opts *ServiceOptions) *Service {
+func NewService(host string, port int, opts *ServiceOptions, logger *internals.Logger) *Service {
 	s := &Service{
 		Name:            host,
 		Host:            host,
@@ -51,6 +54,7 @@ func NewService(host string, port int, opts *ServiceOptions) *Service {
 		AliveStatus:     true,
 		HealthCheckPath: "/health",
 		Weight:          0,
+		Logger:          logger,
 	}
 
 	if opts != nil {
@@ -81,7 +85,7 @@ func (s *Service) HealthCheckService() error {
 		s.AliveStatus = false
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Verify that the health check returned a 200 code
 	if resp.StatusCode != http.StatusOK {
@@ -95,7 +99,7 @@ func (s *Service) HealthCheckService() error {
 
 // PeriodicallyHealthCheckService will run health check onto every registered service every 5 seconds
 // if the service fails the health check the service will be marked as `AliveStatus = false`
-func (s *Service) PeriodicallyHealthCheckService(ctx context.Context, logger *internals.Logger) {
+func (s *Service) PeriodicallyHealthCheckService(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -105,7 +109,7 @@ func (s *Service) PeriodicallyHealthCheckService(ctx context.Context, logger *in
 			return
 		case <-ticker.C:
 			err := s.HealthCheckService()
-			logger.Error("Health check failed for service %s: %s", s.Name, err)
+			s.Logger.Error("Health check failed for service %s: %s", s.Name, err)
 		}
 	}
 }
