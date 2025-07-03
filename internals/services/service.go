@@ -12,6 +12,13 @@ import (
 
 const defaultHeartbeatInterval = 30 * time.Second
 
+const defaultHealthCheckDuration = 5 * time.Second
+
+type ServiceMetadata struct {
+	// FailureCount tracks how many subsequent requests to this service has failed
+	FailureCount int
+}
+
 // Service corresponds to an Application server listening on the provided host and port
 // services are registered at the very start of the load balancer
 type Service struct {
@@ -27,8 +34,13 @@ type Service struct {
 	// AliveStatus is true if the last health check to the service was successful
 	AliveStatus bool
 
+	State string
+
 	// HealthCheckPath points to the health check path for this service
 	HealthCheckPath string
+
+	// HealthCheckDuration is the interval in which the proxy will hit the service
+	HealthCheckDuration time.Duration
 
 	// ConnectionCount tracks active count to this service
 	ConnectionCount int
@@ -38,6 +50,9 @@ type Service struct {
 
 	// Logger directly injected into service
 	Logger *internals.Logger
+
+	// Metadata contains information used by Splitbit to maintain this service
+	Metadata ServiceMetadata
 }
 
 type ServiceOptions struct {
@@ -48,13 +63,17 @@ type ServiceOptions struct {
 
 func NewService(host string, port int, opts *ServiceOptions, logger *internals.Logger) *Service {
 	s := &Service{
-		Name:            host,
-		Host:            host,
-		Port:            port,
-		AliveStatus:     true,
-		HealthCheckPath: "/health",
-		Weight:          0,
-		Logger:          logger,
+		Name:                host,
+		Host:                host,
+		Port:                port,
+		AliveStatus:         false,
+		HealthCheckPath:     "/health",
+		HealthCheckDuration: defaultHealthCheckDuration,
+		Weight:              0,
+		Logger:              logger,
+		Metadata: ServiceMetadata{
+			FailureCount: 0,
+		},
 	}
 
 	if opts != nil {

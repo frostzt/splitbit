@@ -82,7 +82,7 @@ func main() {
 	var err error
 
 	// Load configuration
-	config, err := internals.LoadConfig("./example-splitbit-config.yml")
+	config, err := internals.LoadConfig("./splitbit-config.yml")
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
@@ -92,6 +92,7 @@ func main() {
 
 	logger.Info("Starting splitbit service with env %s", config.Env)
 
+	// Initialize context for services registered
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
