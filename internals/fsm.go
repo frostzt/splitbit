@@ -11,6 +11,8 @@ import (
 // an event given its current state
 var ErrEventRejected = errors.New("event rejected")
 
+// ErrInvalidConfig is returned when the state machine encounters a state which is
+// incorrectly configured
 var ErrInvalidConfig = errors.New("invalid config")
 
 const (

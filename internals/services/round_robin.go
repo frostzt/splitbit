@@ -26,7 +26,7 @@ func (rr *RoundRobinSelector) SelectService() *Service {
 		svc := rr.services[rr.index%len(rr.services)]
 		rr.index++
 
-		if svc.AliveStatus {
+		if svc.FSM.CurrentState == StateAlive {
 			return svc
 		}
 	}

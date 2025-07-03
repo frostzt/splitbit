@@ -3,15 +3,37 @@ package services
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/frostzt/splitbit/internals"
 )
 
-const defaultHeartbeatInterval = 30 * time.Second
+const (
+	// StatePending represents that the service has just been registered and hasn't been probed yet
+	StatePending internals.StateType = "PENDING"
 
+	// StateAlive represents a service whose health check succeeded (for 3 subsequent calls)
+	StateAlive internals.StateType = "ALIVE"
+
+	// StateDown represents a service whose health check failed (for 3 subsequent calls)
+	StateDown internals.StateType = "DOWN"
+
+	// StateHalfOpen represents a service which has failed health check but is currently being tried again to recover
+	StateHalfOpen internals.StateType = "HALF_OPEN"
+
+	// EventSuccess triggers when a service has passed health check
+	EventSuccess internals.EventType = "SUCCESS"
+
+	// EventFailure triggers when a service has failed health check
+	EventFailure internals.EventType = "FAILURE"
+
+	// EventForceRecovery triggers when a service is probed again after it went down in an attempt
+	// to being recovered
+	EventForceRecovery internals.EventType = "RECOVERY"
+)
+
+// defaultHealthCheckDuration is the default time interval used in health checks
 const defaultHealthCheckDuration = 5 * time.Second
 
 type ServiceMetadata struct {
@@ -31,10 +53,8 @@ type Service struct {
 	// Port on which the service is actively listening for connections
 	Port int
 
-	// AliveStatus is true if the last health check to the service was successful
-	AliveStatus bool
-
-	State string
+	// FSM is the state machine which keeps track of the current state of this service
+	FSM *internals.StateMachine
 
 	// HealthCheckPath points to the health check path for this service
 	HealthCheckPath string
@@ -66,7 +86,7 @@ func NewService(host string, port int, opts *ServiceOptions, logger *internals.L
 		Name:                host,
 		Host:                host,
 		Port:                port,
-		AliveStatus:         false,
+		FSM:                 NewFSMForService(),
 		HealthCheckPath:     "/health",
 		HealthCheckDuration: defaultHealthCheckDuration,
 		Weight:              0,
@@ -93,6 +113,39 @@ func NewService(host string, port int, opts *ServiceOptions, logger *internals.L
 	return s
 }
 
+func NewFSMForService() *internals.StateMachine {
+	return &internals.StateMachine{
+		CurrentState: StatePending,
+		States: internals.States{
+			StatePending: internals.State{
+				Events: internals.Events{
+					EventSuccess: StateAlive,
+					EventFailure: StateDown,
+				},
+			},
+			StateAlive: internals.State{
+				Action: &ServiceAliveAction{},
+				Events: internals.Events{
+					EventFailure: StateDown,
+				},
+			},
+			StateDown: internals.State{
+				Action: &ServiceDownAction{},
+				Events: internals.Events{
+					EventSuccess:       StateAlive,
+					EventForceRecovery: StateHalfOpen,
+				},
+			},
+			StateHalfOpen: internals.State{
+				Events: internals.Events{
+					EventFailure: StateDown,
+					EventSuccess: StateAlive,
+				},
+			},
+		},
+	}
+}
+
 // HealthCheckService performs health check on the provided service's health check route if the call fails
 // it marks the [AliveStatus] as false otherwise marks it as true
 func (s *Service) HealthCheckService() error {
@@ -101,18 +154,15 @@ func (s *Service) HealthCheckService() error {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		s.AliveStatus = false
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// Verify that the health check returned a 200 code
 	if resp.StatusCode != http.StatusOK {
-		s.AliveStatus = false
 		return fmt.Errorf("non-200 health check %d", resp.StatusCode)
 	}
 
-	s.AliveStatus = true
 	return nil
 }
 
@@ -128,51 +178,16 @@ func (s *Service) PeriodicallyHealthCheckService(ctx context.Context) {
 			return
 		case <-ticker.C:
 			err := s.HealthCheckService()
-			s.Logger.Error("Health check failed for service %s: %s", s.Name, err)
-		}
-	}
-}
-
-func (s *Service) Pinger(ctx context.Context, w io.Writer, reset <-chan time.Duration) {
-	var interval time.Duration
-	select {
-	case <-ctx.Done():
-		return
-
-	case interval = <-reset:
-	default:
-	}
-
-	if interval <= 0 {
-		interval = defaultHeartbeatInterval
-	}
-
-	timer := time.NewTimer(interval)
-	defer func() {
-		if !timer.Stop() {
-			<-timer.C
-		}
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case newInterval := <-reset:
-			if !timer.Stop() {
-				<-timer.C
-			}
-			if newInterval > 0 {
-				interval = newInterval
+			event := EventSuccess
+			if err != nil {
+				event = EventFailure
+				s.Logger.Error("Health check failed for service %s: %s", s.Name, err)
 			}
 
-		case <-timer.C:
-			if _, err := w.Write([]byte("ping")); err != nil {
-				return
+			if err := s.FSM.SendEvent(event, &CommonActionCtx{svc: s}); err != nil {
+				s.Logger.Warn("FSM rejected event %s for service %s, %v", event, s.Name, err)
 			}
 		}
-
-		_ = timer.Reset(interval)
 	}
 }
 

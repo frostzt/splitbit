@@ -26,7 +26,7 @@ func (wrr *WeightedRRSelector) SelectService() *Service {
 	for tries := 0; tries < len(wrr.services)*2; tries++ {
 		service := wrr.services[wrr.index%len(wrr.services)]
 
-		if service.AliveStatus && wrr.counter < service.Weight {
+		if service.FSM.CurrentState == StateAlive && wrr.counter < service.Weight {
 			wrr.counter++
 			return service
 		}
