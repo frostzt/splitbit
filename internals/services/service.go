@@ -184,8 +184,14 @@ func (s *Service) PeriodicallyHealthCheckService(ctx context.Context) {
 				s.Logger.Error("Health check failed for service %s: %s", s.Name, err)
 			}
 
+			// Update the state
 			if err := s.FSM.SendEvent(event, &CommonActionCtx{svc: s}); err != nil {
 				s.Logger.Warn("FSM rejected event %s for service %s, %v", event, s.Name, err)
+			}
+
+			// If the service fails at least 3 times try in an interval of 60 seconds
+			if event == EventFailure && s.Metadata.FailureCount >= 3 {
+				ticker.Reset(60 * time.Second)
 			}
 		}
 	}
