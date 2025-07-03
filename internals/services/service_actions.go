@@ -1,6 +1,10 @@
 package services
 
-import "github.com/frostzt/splitbit/internals"
+import (
+	"time"
+
+	"github.com/frostzt/splitbit/internals"
+)
 
 type CommonActionCtx struct {
 	svc *Service
@@ -29,6 +33,17 @@ func (a *ServiceDownAction) Execute(eventCtx internals.EventContext) internals.E
 		ctx.svc.Logger.Warn("Service %s has failed for 3 consecutive health checks", ctx.svc.Name)
 		return internals.NOOP
 	}
+
+	return internals.NOOP
+}
+
+type ServiceHalfOpenAction struct{}
+
+func (a *ServiceHalfOpenAction) Execute(eventCtx internals.EventContext) internals.EventType {
+	ctx := eventCtx.(*CommonActionCtx)
+	ctx.svc.Logger.Debug("Received service half open event for %s", ctx.svc.Name)
+
+	ctx.svc.Metadata.LastRecoveryAttempt = time.Now()
 
 	return internals.NOOP
 }

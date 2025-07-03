@@ -39,6 +39,9 @@ const defaultHealthCheckDuration = 5 * time.Second
 type ServiceMetadata struct {
 	// FailureCount tracks how many subsequent requests to this service has failed
 	FailureCount int
+
+	// LastRecoveryAttempt is the time at which this service was down and a forced recovery was initiated
+	LastRecoveryAttempt time.Time
 }
 
 // Service corresponds to an Application server listening on the provided host and port
@@ -187,11 +190,6 @@ func (s *Service) PeriodicallyHealthCheckService(ctx context.Context) {
 			// Update the state
 			if err := s.FSM.SendEvent(event, &CommonActionCtx{svc: s}); err != nil {
 				s.Logger.Warn("FSM rejected event %s for service %s, %v", event, s.Name, err)
-			}
-
-			// If the service fails at least 3 times try in an interval of 60 seconds
-			if event == EventFailure && s.Metadata.FailureCount >= 3 {
-				ticker.Reset(60 * time.Second)
 			}
 		}
 	}
