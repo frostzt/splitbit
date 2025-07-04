@@ -25,19 +25,19 @@ var (
 	backendSelector services.BackendSelector
 )
 
-func handleTCPConn(conn net.Conn) {
-	log.Printf("Accepting TCP connection from %s with destination of %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
+func handleTCPConn(conn net.Conn, logger *internals.Logger) {
+	logger.Info("Accepting TCP connection from %s with destination of %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
 	defer func() { _ = conn.Close() }()
 
 	backend := backendSelector.SelectService()
 	if backend == nil {
-		log.Printf("No backend selected")
+		logger.Warn("No backend selected")
 		return
 	}
 
 	remoteConn, err := net.Dial("tcp", backend.Address())
 	if err != nil {
-		log.Printf("failed to connect to backend: %v", err)
+		logger.Error("failed to connect to backend: %v", err)
 		return
 	}
 
@@ -48,8 +48,16 @@ func handleTCPConn(conn net.Conn) {
 	streamWait.Add(2)
 
 	streamConn := func(dst io.Writer, src io.Reader) {
-		io.Copy(dst, src)
+		written, copyErr := io.Copy(dst, src)
+		if copyErr != nil {
+			logger.Error("failed to copy: %v", err)
+			return
+		}
+
+		logger.Info("Copied %d bytes to backend", written)
+
 		streamWait.Done()
+		return
 	}
 
 	go streamConn(remoteConn, conn)
@@ -58,23 +66,23 @@ func handleTCPConn(conn net.Conn) {
 	streamWait.Wait()
 }
 
-func listenTCPConn() {
+func listenTCPConn(logger *internals.Logger) {
 	for {
 		conn, err := tcpListener.Accept()
 
-		log.Printf("Remote: %s → Local: %s", conn.RemoteAddr(), conn.LocalAddr())
+		logger.Info("Remote: %s → Local: %s", conn.RemoteAddr(), conn.LocalAddr())
 
 		if err != nil {
 			var netErr net.Error
 			if errors.As(err, &netErr) && netErr.Temporary() {
-				log.Printf("temporary error: %v", err)
+				logger.Debug("temporary error: %v", err)
 				continue
 			}
 
-			log.Fatalf("failed to accept tcp conn: %v", err)
+			logger.Fatal("failed to accept tcp conn: %v", err)
 		}
 
-		go handleTCPConn(conn)
+		go handleTCPConn(conn, logger)
 	}
 }
 
@@ -120,7 +128,7 @@ func main() {
 	}
 
 	defer func() { _ = tcpListener.Close() }()
-	go listenTCPConn()
+	go listenTCPConn(logger)
 
 	// Listen for interrupts
 	interruptListener := make(chan os.Signal)

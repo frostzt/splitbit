@@ -3,6 +3,7 @@ package internals
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 )
 
@@ -63,4 +64,9 @@ func (l *Logger) Warn(format string, args ...any) {
 
 func (l *Logger) Error(format string, args ...any) {
 	l.Log(LogLevelError, format, args...)
+}
+
+func (l *Logger) Fatal(format string, args ...any) {
+	l.Log(LogLevelError, format, args...)
+	os.Exit(1)
 }
