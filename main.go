@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"io"
 	"log"
 	"net"
@@ -54,6 +55,7 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 		b := make([]byte, 1024)
 		r := io.TeeReader(src, dst)
 
+		// Read the data in the byte array
 		bytesRead, readErr := r.Read(b)
 		if readErr != nil && readErr != io.EOF {
 			logger.Error("failed to read bytes: %v", readErr)
@@ -110,10 +112,14 @@ func listenTCPConn(logger *internals.Logger) {
 func main() {
 	var err error
 
+	// Flag
+	configFilePtr := flag.String("config", "./splitbit-config.yml", "a custom config file")
+	flag.Parse()
+
 	// Load configuration
-	config, err := internals.LoadConfig("./example-splitbit-config.yml")
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+	config, configErr := internals.LoadConfig(*configFilePtr)
+	if configErr != nil {
+		log.Fatalf("failed to load config: %v", configErr)
 	}
 
 	// Logger
@@ -143,10 +149,12 @@ func main() {
 
 	backendSelector = services.NewRoundRobinSelector(availableServices)
 
-	tcpListener, err = internals.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 8080})
+	tcpListener, err = internals.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: config.Port})
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
+	logger.Info("Splitbit ready to accept connection on %d", config.Port)
 
 	defer func() { _ = tcpListener.Close() }()
 	go listenTCPConn(logger)

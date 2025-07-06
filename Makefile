@@ -22,7 +22,7 @@ build:
 # Run the application
 run: build
 	@echo "Running $(BINARY_NAME)..."
-	$(BINARY_PATH)
+	$(BINARY_PATH) -config=./example-splitbit-config.yml
 
 # Run without building (direct go run)
 dev:

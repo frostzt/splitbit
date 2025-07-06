@@ -12,6 +12,7 @@ import (
 type SplitbitConfig struct {
 	Name      string          `yaml:"name"`
 	Env       string          `yaml:"env"`
+	Port      int             `yaml:"port"`
 	Algorithm string          `yaml:"algorithm"`
 	Scheme    string          `yaml:"scheme"`
 	Backends  []BackendConfig `yaml:"backends"`
@@ -37,6 +38,10 @@ func (cfg *SplitbitConfig) Validate() error {
 		} else {
 			return errors.New("only [DEV, PROD] are supported as env")
 		}
+	}
+
+	if cfg.Port == 0 {
+		cfg.Port = 8080
 	}
 
 	supported := []string{"round-robin", "weighted-round-robin"}

@@ -1,5 +1,6 @@
 name: splitbit-example-config
 algorithm: round-robin
+port: 9000
 env: "DEV"
 scheme: "tcp"
 backends:
