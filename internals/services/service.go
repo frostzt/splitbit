@@ -187,6 +187,16 @@ func (s *Service) PeriodicallyHealthCheckService(ctx context.Context) {
 				s.Logger.Error("Health check failed for service %s: %s", s.Name, err)
 			}
 
+			// Do not resend Success events to state machine if the current state is already ALIVE
+			if s.FSM.CurrentState == StateAlive && event == EventSuccess {
+				continue
+			}
+
+			// Do not resend Failure events to state machine if the current state is already DOWN
+			if s.FSM.CurrentState == StateDown && event == EventFailure {
+				continue
+			}
+
 			// Update the state
 			if err := s.FSM.SendEvent(event, &CommonActionCtx{svc: s}); err != nil {
 				s.Logger.Warn("FSM rejected event %s for service %s, %v", event, s.Name, err)

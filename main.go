@@ -47,18 +47,41 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 	var streamWait sync.WaitGroup
 	streamWait.Add(2)
 
+	// Monitor
+	//monitor := &internals.Monitor{Logger: log.New(os.Stdout, "MONITOR: ", 0)}
+
 	streamConn := func(dst io.Writer, src io.Reader) {
+		b := make([]byte, 1024)
+		r := io.TeeReader(src, dst)
+
+		bytesRead, readErr := r.Read(b)
+		if readErr != nil && readErr != io.EOF {
+			logger.Error("failed to read bytes: %v", readErr)
+			return
+		}
+
+		logger.Info("Read %d bytes", bytesRead)
+		logger.Info("data logged", b[:bytesRead])
+
 		written, copyErr := io.Copy(dst, src)
 		if copyErr != nil {
 			logger.Error("failed to copy: %v", err)
 			return
 		}
 
-		logger.Info("Copied %d bytes to backend", written)
+		logger.Debug("Copied %d bytes to backend", written)
 
 		streamWait.Done()
 		return
 	}
+
+	logger.Debug("------------------- REMOTE CONN -------------------")
+	logger.Debug("Local Address: ", remoteConn.LocalAddr().String())
+	logger.Debug("Remote Address: ", remoteConn.RemoteAddr().String())
+
+	logger.Debug("------------------- CONN -------------------")
+	logger.Debug("Local Address: ", conn.LocalAddr().String())
+	logger.Debug("Remote Address: ", conn.RemoteAddr().String())
 
 	go streamConn(remoteConn, conn)
 	go streamConn(conn, remoteConn)
