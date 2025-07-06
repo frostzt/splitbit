@@ -26,6 +26,7 @@ var (
 	backendSelector services.BackendSelector
 )
 
+// handleTCPConn handles incoming TCP connections
 func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 	logger.Info("Accepting TCP connection from %s with destination of %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
 	defer func() { _ = conn.Close() }()
@@ -48,7 +49,7 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 	var streamWait sync.WaitGroup
 	streamWait.Add(2)
 
-	// Monitor
+	// TODO: Create transports that implement Writer interface to allow users to provide different writers
 	monitor := &internals.Monitor{Logger: log.New(os.Stdout, "MONITOR: ", 0)}
 
 	streamConn := func(dst io.Writer, src io.Reader) {
