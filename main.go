@@ -48,7 +48,7 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 	streamWait.Add(2)
 
 	// Monitor
-	//monitor := &internals.Monitor{Logger: log.New(os.Stdout, "MONITOR: ", 0)}
+	monitor := &internals.Monitor{Logger: log.New(os.Stdout, "MONITOR: ", 0)}
 
 	streamConn := func(dst io.Writer, src io.Reader) {
 		b := make([]byte, 1024)
@@ -60,12 +60,10 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 			return
 		}
 
-		logger.Info("Read %d bytes", bytesRead)
-		logger.Info("data logged", b[:bytesRead])
-
-		written, copyErr := io.Copy(dst, src)
-		if copyErr != nil {
-			logger.Error("failed to copy: %v", err)
+		w := io.MultiWriter(dst, monitor)
+		written, writeErr := w.Write(b[:bytesRead])
+		if writeErr != nil && writeErr != io.EOF {
+			logger.Error("failed to write bytes: %v", writeErr)
 			return
 		}
 
@@ -76,12 +74,12 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 	}
 
 	logger.Debug("------------------- REMOTE CONN -------------------")
-	logger.Debug("Local Address: ", remoteConn.LocalAddr().String())
-	logger.Debug("Remote Address: ", remoteConn.RemoteAddr().String())
+	logger.Debug("Local Address: %s", remoteConn.LocalAddr().String())
+	logger.Debug("Remote Address: %s", remoteConn.RemoteAddr().String())
 
 	logger.Debug("------------------- CONN -------------------")
-	logger.Debug("Local Address: ", conn.LocalAddr().String())
-	logger.Debug("Remote Address: ", conn.RemoteAddr().String())
+	logger.Debug("Local Address: %s", conn.LocalAddr().String())
+	logger.Debug("Remote Address: %s", conn.RemoteAddr().String())
 
 	go streamConn(remoteConn, conn)
 	go streamConn(conn, remoteConn)
