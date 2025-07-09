@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"github.com/frostzt/splitbit/internals"
 	"github.com/frostzt/splitbit/internals/services"
@@ -53,15 +54,27 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 	monitor := &internals.Monitor{Logger: log.New(os.Stdout, "MONITOR: ", 0)}
 
 	streamConn := func(dst io.Writer, src io.Reader) {
+		defer streamWait.Done()
+
 		b := make([]byte, 1024)
 		r := io.TeeReader(src, dst)
+
+		// Set deadline before reading
+		internals.SetReadDeadline(src, 30*time.Second, logger)
 
 		// Read the data in the byte array
 		bytesRead, readErr := r.Read(b)
 		if readErr != nil && readErr != io.EOF {
-			logger.Error("failed to read bytes: %v", readErr)
+			var netErr net.Error
+			if errors.As(readErr, &netErr) && netErr.Timeout() {
+				logger.Warn("read timeout from %s: %v", src.(*net.TCPConn).RemoteAddr().String(), readErr)
+			}
+
 			return
 		}
+
+		// Set deadline before writing
+		internals.SetWriteDeadline(dst, 30*time.Second, logger)
 
 		w := io.MultiWriter(dst, monitor)
 		written, writeErr := w.Write(b[:bytesRead])
@@ -72,7 +85,6 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 
 		logger.Debug("Copied %d bytes to backend", written)
 
-		streamWait.Done()
 		return
 	}
 

@@ -13,6 +13,7 @@ type SplitbitConfig struct {
 	Name      string          `yaml:"name"`
 	Env       string          `yaml:"env"`
 	Port      int             `yaml:"port"`
+	Timeout   int             `yaml:"timeout"`
 	Algorithm string          `yaml:"algorithm"`
 	Scheme    string          `yaml:"scheme"`
 	Backends  []BackendConfig `yaml:"backends"`
@@ -42,6 +43,16 @@ func (cfg *SplitbitConfig) Validate() error {
 
 	if cfg.Port == 0 {
 		cfg.Port = 8080
+	}
+
+	// Set default timeout to 30
+	if cfg.Timeout == 0 {
+		cfg.Timeout = 30
+	} else if cfg.Timeout < 0 {
+		return errors.New("invalid timeout value provided")
+	} else if cfg.Timeout > 30 {
+		fmt.Printf(`timeout provided is %d seconds which is longer than the recommended 30, please beware about 
+attacks such as slow-loris\n`, cfg.Timeout)
 	}
 
 	supported := []string{"round-robin", "weighted-round-robin"}

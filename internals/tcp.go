@@ -3,10 +3,12 @@ package internals
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -172,4 +174,28 @@ func tcpAddrFamily(net string, localAddr, remoteAddr *net.TCPAddr) int {
 		return syscall.AF_INET
 	}
 	return syscall.AF_INET6
+}
+
+func SetReadDeadline(conn io.Reader, timeout time.Duration, logger *Logger) {
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		err := tcpConn.SetReadDeadline(time.Now().Add(timeout))
+		if err != nil {
+			logger.Error("failed to set read deadline: %v", err)
+			return
+		}
+	} else {
+		logger.Warn("src is not a *net.TCPConn, skipping setting read deadline")
+	}
+}
+
+func SetWriteDeadline(conn io.Writer, timeout time.Duration, logger *Logger) {
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		err := tcpConn.SetWriteDeadline(time.Now().Add(timeout))
+		if err != nil {
+			logger.Error("failed to set write deadline: %v", err)
+			return
+		}
+	} else {
+		logger.Warn("src is not a *net.TCPConn, skipping setting write deadline")
+	}
 }
