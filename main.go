@@ -56,36 +56,36 @@ func handleTCPConn(conn net.Conn, logger *internals.Logger) {
 	streamConn := func(dst io.Writer, src io.Reader) {
 		defer streamWait.Done()
 
-		b := make([]byte, 1024)
-		r := io.TeeReader(src, dst)
+		buf := make([]byte, 1024)
+		for {
+			// Set deadline before reading
+			internals.SetReadDeadline(src, 30*time.Second, logger)
 
-		// Set deadline before reading
-		internals.SetReadDeadline(src, 30*time.Second, logger)
+			bytesRead, readErr := src.Read(buf)
+			if readErr != nil {
+				if errors.Is(readErr, io.EOF) {
+					return
+				}
 
-		// Read the data in the byte array
-		bytesRead, readErr := r.Read(b)
-		if readErr != nil && readErr != io.EOF {
-			var netErr net.Error
-			if errors.As(readErr, &netErr) && netErr.Timeout() {
-				logger.Warn("read timeout from %s: %v", src.(*net.TCPConn).RemoteAddr().String(), readErr)
+				var netErr net.Error
+				if errors.As(readErr, &netErr) && netErr.Timeout() {
+					logger.Warn("read timeout from %s: %v\n", src.(*net.TCPConn).RemoteAddr().String(), readErr)
+				} else {
+					logger.Error("read error %v\n", readErr)
+				}
+
+				return
 			}
 
-			return
+			// Set deadline before writing
+			internals.SetWriteDeadline(dst, 30*time.Second, logger)
+
+			w := io.MultiWriter(dst, monitor)
+			if _, writeError := w.Write(buf[:bytesRead]); writeError != nil {
+				logger.Error("failed to write bytes: %v", writeError)
+				return
+			}
 		}
-
-		// Set deadline before writing
-		internals.SetWriteDeadline(dst, 30*time.Second, logger)
-
-		w := io.MultiWriter(dst, monitor)
-		written, writeErr := w.Write(b[:bytesRead])
-		if writeErr != nil && writeErr != io.EOF {
-			logger.Error("failed to write bytes: %v", writeErr)
-			return
-		}
-
-		logger.Debug("Copied %d bytes to backend", written)
-
-		return
 	}
 
 	logger.Debug("------------------- REMOTE CONN -------------------")
@@ -126,7 +126,7 @@ func main() {
 	var err error
 
 	// Flag
-	configFilePtr := flag.String("config", "./splitbit-config.yml", "a custom config file")
+	configFilePtr := flag.String("config", "./example-splitbit-config.yml", "a custom config file")
 	flag.Parse()
 
 	// Load configuration

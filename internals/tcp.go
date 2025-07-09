@@ -19,6 +19,19 @@ type SBTCPConn struct {
 	net.Conn
 }
 
+func (c *SBTCPConn) SetReadDeadline(t time.Time) error {
+	return c.Conn.SetReadDeadline(t)
+}
+
+func (c *SBTCPConn) SetWriteDeadline(t time.Time) error {
+	return c.Conn.SetReadDeadline(t)
+}
+
+func (c *SBTCPConn) TCPConn() (*net.TCPConn, bool) {
+	tcpConn, ok := c.Conn.(*net.TCPConn)
+	return tcpConn, ok
+}
+
 // Listener is a simple TCP Listener
 type Listener struct {
 	base net.Listener
@@ -177,25 +190,39 @@ func tcpAddrFamily(net string, localAddr, remoteAddr *net.TCPAddr) int {
 }
 
 func SetReadDeadline(conn io.Reader, timeout time.Duration, logger *Logger) {
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		err := tcpConn.SetReadDeadline(time.Now().Add(timeout))
+	switch v := conn.(type) {
+	case *net.TCPConn:
+		err := v.SetReadDeadline(time.Now().Add(timeout))
 		if err != nil {
 			logger.Error("failed to set read deadline: %v", err)
 			return
 		}
-	} else {
-		logger.Warn("src is not a *net.TCPConn, skipping setting read deadline")
+	case *SBTCPConn:
+		if tcpConn, ok := v.TCPConn(); ok {
+			_ = tcpConn.SetReadDeadline(time.Now().Add(timeout))
+		} else {
+			logger.Warn("SBTCPConn underlying conn is not *net.TCPConn")
+		}
+	default:
+		logger.Error("failed to set read deadline unsupported type: %v", v)
 	}
 }
 
 func SetWriteDeadline(conn io.Writer, timeout time.Duration, logger *Logger) {
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		err := tcpConn.SetWriteDeadline(time.Now().Add(timeout))
+	switch v := conn.(type) {
+	case *net.TCPConn:
+		err := v.SetWriteDeadline(time.Now().Add(timeout))
 		if err != nil {
 			logger.Error("failed to set write deadline: %v", err)
 			return
 		}
-	} else {
-		logger.Warn("src is not a *net.TCPConn, skipping setting write deadline")
+	case *SBTCPConn:
+		if tcpConn, ok := v.TCPConn(); ok {
+			_ = tcpConn.SetWriteDeadline(time.Now().Add(timeout))
+		} else {
+			logger.Warn("SBTCPConn underlying conn is not *net.TCPConn")
+		}
+	default:
+		logger.Error("failed to set write deadline unsupported type: %v", v)
 	}
 }
